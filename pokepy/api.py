@@ -137,6 +137,7 @@ class V2Client(BaseClient):
         - Ignored the other http methods besides GET (as they are not needed for the pokeapi.co API)
         - Added cache wrapping function
         - Added a way to list all get methods
+        - Added a filter for single element lists (extract element into a standalone object)
         """
         method_name = resource_class.get_method_name(
             resource_class, method_type)
@@ -146,8 +147,18 @@ class V2Client(BaseClient):
             DEFAULT_VALID_STATUS_CODES
         )
 
+        def extract_single_element_list(func):
+            @functools.wraps(func)
+            def inner(*args, **kwargs):
+                final = func(*args, **kwargs)
+                if isinstance(final, list) and len(final) == 1:
+                    final = final[0]
+                return final
+            return inner
+
         # uid is now the first argument (after self)
         @self._cache
+        @extract_single_element_list
         def get(self, uid=None, method_type=method_type,
                 method_name=method_name,
                 valid_status_codes=valid_status_codes,
@@ -204,9 +215,10 @@ class V2Client(BaseClient):
 
             if disk_or_memory == 'disk':
                 if cache_directory:
-                    # Python 2 workaround
-                    if sys.version_info[0] == 2 and not isinstance(cache_directory, str):
-                        raise TypeError('expected str')
+                    # Python 2 and 3.4 workaround
+                    if (sys.version_info[0] == 2 or sys.version_info[0:2] == (3, 4)) and \
+                            not isinstance(cache_directory, str):
+                        raise TypeError('expected str, not %s' % cache_directory.__class__.__name__)
 
                     _global_cache_dir = os.path.join(cache_directory, 'pokepy_cache')
                     cache_dir = os.path.join(_global_cache_dir, str(get_methods_id[0]))
